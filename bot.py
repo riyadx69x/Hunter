@@ -23,8 +23,8 @@ from telegram.ext import (
 # CONFIG
 # =========================================================
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+BOT_TOKEN = "8564093311:AAH55oqI6UmMfXycsEtxtIMjOHNN6atuVoo"
+ADMIN_ID = 7813513663
 
 DB_FILE = "numbers.db"
 
@@ -543,9 +543,6 @@ async def file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not line or line.startswith("#"):
             continue
 
-        # Support:
-        # service|country|number
-        # service,country,number
         if "|" in line:
             parts = [x.strip() for x in line.split("|")]
         else:
@@ -568,7 +565,6 @@ async def file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             invalid += 1
             continue
 
-        # Basic phone number validation
         if not re.fullmatch(r"\+?\d{6,20}", number):
             invalid += 1
             continue
@@ -640,9 +636,6 @@ def main():
         raise RuntimeError(
             "BOT_TOKEN is missing. Set it as an environment variable."
         )
-
-    if ADMIN_ID == 0:
-        print("WARNING: ADMIN_ID is not configured.")
 
     app = (
         Application.builder()

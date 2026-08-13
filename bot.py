@@ -11,27 +11,18 @@ from telegram.ext import (
 # =========================================================
 
 BOT_TOKEN = "8564093311:AAH55oqI6UmMfXycsEtxtIMjOHNN6atuVoo"
-ADMIN_ID = 7813513663  # তোমার টেলিগ্রাম আইডি
+ADMIN_ID = 7813513663
 OTP_GROUP_LINK = "https://t.me/X_OTP_service"
 SUPPORT_LINK = "https://t.me/Kirito_X69"
 DB_FILE = "numbers.db"
 
-# কনভার্সেশন স্টেট
 SERVICE, COUNTRY, UPLOAD = range(3)
 
 COUNTRY_FLAGS = {
-    "morocco": "🇲🇦",
-    "ukraine": "🇺🇦",
-    "iraq": "🇮🇶",
-    "sudan": "🇸🇩",
-    "afghanistan": "🇦🇫",
-    "bangladesh": "🇧🇩",
-    "india": "🇮🇳",
-    "france": "🇫🇷",
-    "malaysia": "🇲🇾",
-    "kyrgyzstan": "🇰🇬",
-    "whatsapp": "🟢",
-    "telegram": "✈️"
+    "morocco": "🇲🇦", "ukraine": "🇺🇦", "iraq": "🇮🇶",
+    "sudan": "🇸🇩", "afghanistan": "🇦🇫", "bangladesh": "🇧🇩",
+    "india": "🇮🇳", "france": "🇫🇷", "malaysia": "🇲🇾",
+    "kyrgyzstan": "🇰🇬", "whatsapp": "🟢", "telegram": "✈️"
 }
 
 SERVICES = {
@@ -144,17 +135,26 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             numbers.append(val)
                             break
         else:
-            # একদম নিখুঁতভাবে টেক্সট ফাইল রিড করার জন্য এনকোডিং ফিক্সড
-            with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
-                for line in f:
+            # একাধিক এনকোডিং ট্রাই করা যাতে গার্বেজ বা ক্রিপ্টিক টেক্সট না আসে
+            raw_data = None
+            for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
+                try:
+                    with open(file_path, 'r', encoding=enc) as f:
+                        raw_data = f.readlines()
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if raw_data:
+                for line in raw_data:
                     cleaned_line = line.strip()
                     if cleaned_line:
                         numbers.append(cleaned_line)
 
         for number in numbers:
-            # নাম্বার ক্লিন করা যেন কোনো গার্বেজ বা ক্রিপ্টিক কোড না ঢোকে
+            # শুধুমাত্র সংখ্যা এবং প্লাস (+) রেখে বাকি সব ফালতু ক্যারেক্টার ফিল্টার করা
             clean_num = "".join([c for c in number if c.isdigit() or c == '+'])
-            if len(clean_num) < 5 or not any(c.isdigit() for c in clean_num):
+            if len(clean_num) < 6 or not any(c.isdigit() for c in clean_num):
                 invalid += 1
                 continue
             try:
@@ -186,7 +186,7 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # =========================================================
-# USER / GENERAL HANDLERS (EXACT REFERENCE LAYOUT)
+# USER / GENERAL HANDLERS
 # =========================================================
 
 def main_menu():
@@ -304,13 +304,14 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         buttons = []
         for _, number in rows:
-            buttons.append([InlineKeyboardButton(f"{flag} 📋 {number}", callback_data="noop")])
+            # রেফারেন্স ছবির মতো চেক বক্স বা ক্লিপবোর্ড স্টাইল যাতে নিখুঁত নাম্বার কপি করা যায়
+            buttons.append([InlineKeyboardButton(f"☑️ 📋 {number}", callback_data="noop")])
 
         buttons.append([
             InlineKeyboardButton("🔄 Change Number", callback_data=f"user_country:{service}:{country}"),
             InlineKeyboardButton("🌐 OTP Group", url=OTP_GROUP_LINK)
         ])
-        buttons.append([InlineKeyboardButton("⬅️ Back", callback_data=f"user_serv:{service}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"user_serv:{service}")])
 
         await query.edit_message_text(
             text,

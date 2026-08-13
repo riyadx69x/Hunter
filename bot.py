@@ -25,13 +25,15 @@ from telegram.ext import (
 
 BOT_TOKEN = "8564093311:AAH55oqI6UmMfXycsEtxtIMjOHNN6atuVoo"
 ADMIN_ID = 7813513663
+OTP_GROUP_LINK = "https://t.me/X_OTP_service"
 
 DB_FILE = "numbers.db"
 
 SERVICES = {
-    "telegram": "✈️ Telegram",
-    "whatsapp": "🟢 WhatsApp",
-    "tiktok": "🎵 TikTok",
+    "telegram": "✈️ TELEGRAM",
+    "facebook": "📘 FACEBOOK",
+    "whatsapp": "🟢 WHATSAPP",
+    "tiktok": "🎵 TIKTOK",
 }
 
 # =========================================================
@@ -84,7 +86,7 @@ def main_menu():
                 callback_data="get_number"
             ),
             InlineKeyboardButton(
-                "🔎 SEARCH NUMBER",
+                "🔎 Search Number",
                 callback_data="search"
             ),
         ],
@@ -94,7 +96,7 @@ def main_menu():
                 callback_data="traffic"
             ),
             InlineKeyboardButton(
-                "👤 MY PROFILE",
+                "🟢 My Profile",
                 callback_data="profile"
             ),
         ],
@@ -144,8 +146,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """, (user.id,))
 
     text = (
-        "🤖 *NUMBER STOCK BOT*\n\n"
-        "Welcome! Select an option below:"
+        "👑 *NUMBER BOT*\n\n"
+        "🌐 *Welcome to Number & OTP Service*\n\n"
+        "✅ *Choose an option below to continue using the bot.*\n\n"
+        "💎 *Premium OTP Service*"
     )
 
     await update.message.reply_text(
@@ -168,7 +172,10 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # MAIN
     if data == "main":
         await query.edit_message_text(
-            "🤖 *NUMBER STOCK BOT*\n\nSelect an option:",
+            "👑 *NUMBER BOT*\n\n"
+            "🌐 *Welcome to Number & OTP Service*\n\n"
+            "✅ *Choose an option below to continue using the bot.*\n\n"
+            "💎 *Premium OTP Service*",
             parse_mode="Markdown",
             reply_markup=main_menu()
         )
@@ -283,9 +290,8 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """, (len(rows), query.from_user.id))
 
         text = (
-            f"{SERVICES.get(service, service)} *({country})*\n"
-            f"📦 Numbers available: {len(rows)}\n\n"
-            "Tap a number to copy it:"
+            f"⏳ *Waiting for OTP...*\n\n"
+            f"📱 *{SERVICES.get(service, service).split()[-1]} ({country})*"
         )
 
         buttons = []
@@ -293,7 +299,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for _, number in rows:
             buttons.append([
                 InlineKeyboardButton(
-                    f"📋 {number}",
+                    f"🇨 " + number,
                     copy_text=CopyTextButton(text=number)
                 )
             ])
@@ -303,6 +309,12 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🔄 Change Number",
                 callback_data=f"country:{service}:{country}"
             ),
+            InlineKeyboardButton(
+                "🌐 OTP Group",
+                url=OTP_GROUP_LINK
+            )
+        ])
+        buttons.append([
             InlineKeyboardButton(
                 "⬅️ Back",
                 callback_data=f"service:{service}"
@@ -605,7 +617,7 @@ async def file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================================
 
 async def reset_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
+    if not is_admin(update.effective_user.user_id if hasattr(update.effective_user, "user_id") else update.effective_user.id):
         await update.message.reply_text("⛔ Admin only.")
         return
 

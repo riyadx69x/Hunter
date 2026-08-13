@@ -9,380 +9,132 @@ from telegram.ext import (
 # =========================================================
 # CONFIGURATION
 # =========================================================
-
 BOT_TOKEN = "8564093311:AAH55oqI6UmMfXycsEtxtIMjOHNN6atuVoo"
 ADMIN_ID = 7813513663
 OTP_GROUP_LINK = "https://t.me/X_OTP_service"
 SUPPORT_LINK = "https://t.me/Kirito_X69"
 DB_FILE = "numbers.db"
 
+# States
 SERVICE, COUNTRY, UPLOAD = range(3)
 
-COUNTRY_FLAGS = {
-    "morocco": "🇲🇦", "ukraine": "🇺🇦", "iraq": "🇮🇶",
-    "sudan": "🇸🇩", "afghanistan": "🇦🇫", "bangladesh": "🇧🇩",
-    "india": "🇮🇳", "france": "🇫🇷", "malaysia": "🇲🇾",
-    "kyrgyzstan": "🇰🇬", "whatsapp": "🟢", "telegram": "✈️"
-}
-
+# Services & Mapping
 SERVICES = {
-    "whatsapp": "🟢 WHATSAPP",
     "telegram": "✈️ TELEGRAM",
+    "whatsapp": "🟢 WHATSAPP",
     "facebook": "📘 FACEBOOK",
-    "tiktok": "🎵 TIKTOK",
+    "tiktok": "🎵 TIKTOK"
 }
 
 # =========================================================
 # DATABASE SETUP
 # =========================================================
-
 db = sqlite3.connect(DB_FILE, check_same_thread=False)
-db.execute("""
-CREATE TABLE IF NOT EXISTS numbers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    service TEXT NOT NULL,
-    country TEXT NOT NULL,
-    number TEXT NOT NULL UNIQUE,
-    used INTEGER DEFAULT 0
-)
-""")
-db.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    claimed INTEGER DEFAULT 0
-)
-""")
+db.execute("CREATE TABLE IF NOT EXISTS numbers (id INTEGER PRIMARY KEY AUTOINCREMENT, service TEXT, country TEXT, number TEXT UNIQUE, used INTEGER DEFAULT 0)")
 db.commit()
 
-def is_admin(user_id):
-    return user_id == ADMIN_ID
-
 # =========================================================
-# ADMIN UPLOAD CONVERSATION HANDLERS
+# KEYBOARD LAYOUTS (HUbUHU MATCHING YOUR REFERENCE)
 # =========================================================
-
-async def start_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("⛔ You are not authorized!")
-        return ConversationHandler.END
-    
-    buttons = []
-    for key, name in SERVICES.items():
-        buttons.append([InlineKeyboardButton(name, callback_data=f"up_serv:{key}")])
-    
-    await update.message.reply_text(
-        "📂 *Select Service for Upload:*", 
-        parse_mode="Markdown", 
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
-    return SERVICE
-
-async def admin_select_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    service_key = query.data.split(":")[1]
-    context.user_data['upload_service'] = service_key
-    
-    await query.edit_message_text(
-        f"✅ Selected Service: *{SERVICES.get(service_key, service_key)}*\n\n"
-        "✍️ *Now send the Country Name (e.g., Morocco):*", 
-        parse_mode="Markdown"
-    )
-    return COUNTRY
-
-async def admin_select_country(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    country_name = update.message.text.strip().lower()
-    context.user_data['upload_country'] = country_name
-    
-    await update.message.reply_text(
-        f"✅ Country: *{country_name.upper()}*\n\n"
-        "📤 *Now send/upload your `.xlsx` or `.txt` file containing the numbers:*", 
-        parse_mode="Markdown"
-    )
-    return UPLOAD
-
-async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        return ConversationHandler.END
-
-    document = update.message.document
-    if not document:
-        await update.message.reply_text("❌ Please upload a valid file!")
-        return UPLOAD
-
-    tg_file = await document.get_file()
-    file_path = "temp_upload_file.file"
-    await tg_file.download_to_drive(file_path)
-
-    service = context.user_data.get('upload_service')
-    country = context.user_data.get('upload_country')
-
-    added = 0
-    duplicate = 0
-    invalid = 0
-
-    try:
-        numbers = []
-        if document.file_name.endswith('.xlsx'):
-            wb = openpyxl.load_workbook(file_path, data_only=True)
-            sheet = wb.active
-            for row in sheet.iter_rows(values_only=True):
-                for cell in row:
-                    if cell is not None:
-                        val = str(cell).strip()
-                        if val and not val.lower().startswith("nan"):
-                            numbers.append(val)
-                            break
-        else:
-            # একাধিক এনকোডিং ট্রাই করা যাতে গার্বেজ বা ক্রিপ্টিক টেক্সট না আসে
-            raw_data = None
-            for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
-                try:
-                    with open(file_path, 'r', encoding=enc) as f:
-                        raw_data = f.readlines()
-                    break
-                except UnicodeDecodeError:
-                    continue
-            
-            if raw_data:
-                for line in raw_data:
-                    cleaned_line = line.strip()
-                    if cleaned_line:
-                        numbers.append(cleaned_line)
-
-        for number in numbers:
-            # শুধুমাত্র সংখ্যা এবং প্লাস (+) রেখে বাকি সব ফালতু ক্যারেক্টার ফিল্টার করা
-            clean_num = "".join([c for c in number if c.isdigit() or c == '+'])
-            if len(clean_num) < 6 or not any(c.isdigit() for c in clean_num):
-                invalid += 1
-                continue
-            try:
-                db.execute("INSERT INTO numbers (service, country, number, used) VALUES (?, ?, ?, 0)", (service, country, clean_num))
-                added += 1
-            except sqlite3.IntegrityError:
-                duplicate += 1
-            except Exception:
-                invalid += 1
-
-        db.commit()
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error reading file: {e}")
-        return ConversationHandler.END
-
-    await update.message.reply_text(
-        "✅ *STOCK UPDATE COMPLETE*\n\n"
-        f"📌 Service: *{SERVICES.get(service, service)}*\n"
-        f"🌍 Country: *{country.upper()}*\n"
-        f"➕ Added: {added}\n"
-        f"♻️ Duplicate: {duplicate}\n"
-        f"❌ Invalid: {invalid}",
-        parse_mode="Markdown"
-    )
-    return ConversationHandler.END
-
-async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Upload cancelled.")
-    return ConversationHandler.END
-
-# =========================================================
-# USER / GENERAL HANDLERS
-# =========================================================
-
-def main_menu():
+def get_main_menu():
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📞 Get Number", callback_data="get_number"),
-            InlineKeyboardButton("🌐 Available Countries", callback_data="search")
-        ],
-        [
-            InlineKeyboardButton("📊 Live Traffic", callback_data="traffic"),
-            InlineKeyboardButton("👤 My Profile", callback_data="profile")
-        ],
-        [
-            InlineKeyboardButton("🟢 Whatsapp checker", url=SUPPORT_LINK)
-        ]
+        [InlineKeyboardButton("📞 GET NUMBER", callback_data="get_number"), InlineKeyboardButton("🔍 Search Number", callback_data="search")],
+        [InlineKeyboardButton("📊 TRAFFIC", callback_data="traffic"), InlineKeyboardButton("👤 My Profile", callback_data="profile")],
+        [InlineKeyboardButton("🆘 SUPPORT", url=SUPPORT_LINK)]
     ])
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    db.execute("INSERT OR IGNORE INTO users(user_id, claimed) VALUES (?, 0)", (user.id,))
-    db.commit()
-    
-    text = (
-        f"👋 *Welcome, {user.first_name}!* 🤝\n\n"
-        "✨ *Choose an option from the menu below.*"
-    )
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=main_menu())
+# =========================================================
+# ADMIN UPLOAD HANDLERS
+# =========================================================
+async def start_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID: return
+    buttons = [[InlineKeyboardButton(name, callback_data=f"up_serv:{key}")] for key, name in SERVICES.items()]
+    await update.message.reply_text("📂 *Select Service to add stock:*", reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+    return SERVICE
 
-async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    data = query.data
+    context.user_data['s'] = query.data.split(":")[1]
+    await query.edit_message_text("✍️ *Enter Country Name (e.g., Morocco):*", parse_mode="Markdown")
+    return COUNTRY
 
-    if data == "main":
-        user = query.from_user
-        await query.edit_message_text(
-            f"👋 *Welcome, {user.first_name}!* 🤝\n\n"
-            "✨ *Choose an option from the menu below.*",
-            parse_mode="Markdown",
-            reply_markup=main_menu()
-        )
-        return
+async def admin_country(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['c'] = update.message.text.strip().lower()
+    await update.message.reply_text("📤 *Now upload the .txt or .xlsx file:*", parse_mode="Markdown")
+    return UPLOAD
 
-    if data == "get_number":
-        buttons = []
-        for key, name in SERVICES.items():
-            buttons.append([InlineKeyboardButton(name, callback_data=f"user_serv:{key}")])
-        buttons.append([InlineKeyboardButton("⬅️ Back", callback_data="main")])
-        
-        await query.edit_message_text(
-            "📍 *Select a service:*",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-        return
-
-    if data.startswith("user_serv:"):
-        service = data.split(":")[1]
-        rows = db.execute("SELECT DISTINCT country FROM numbers WHERE service = ? AND used = 0 ORDER BY country", (service,)).fetchall()
-        
-        if not rows:
-            await query.edit_message_text(
-                "❌ No numbers available for this service right now.", 
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="get_number")]])
-            )
-            return
-
-        buttons = []
-        for (country,) in rows:
-            flag = COUNTRY_FLAGS.get(country.lower(), "🌍")
-            buttons.append([InlineKeyboardButton(f"{flag} {country.upper()}", callback_data=f"user_country:{service}:{country}")])
-        buttons.append([InlineKeyboardButton("⬅️ Back", callback_data="get_number")])
-
-        await query.edit_message_text(
-            f"📍 *Select a country for {SERVICES.get(service, service)}:*",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-        return
-
-    if data.startswith("user_country:"):
-        parts = data.split(":")
-        if len(parts) != 3:
-            return
-        
-        service = parts[1]
-        country = parts[2]
-
-        rows = db.execute("SELECT id, number FROM numbers WHERE service = ? AND country = ? AND used = 0 ORDER BY id LIMIT 3", (service, country)).fetchall()
-        
-        if not rows:
-            await query.edit_message_text(
-                "❌ No numbers available for this country.", 
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data=f"user_serv:{service}")]])
-            )
-            return
-
-        ids = [row[0] for row in rows]
-        placeholders = ",".join(["?"] * len(ids))
-        db.execute(f"UPDATE numbers SET used = 1 WHERE id IN ({placeholders})", ids)
-        db.commit()
-
-        user_id = query.from_user.id
-        db.execute("INSERT OR IGNORE INTO users(user_id, claimed) VALUES (?, 0)", (user_id,))
-        db.execute("UPDATE users SET claimed = claimed + ? WHERE user_id = ?", (len(rows), user_id))
-        db.commit()
-
-        flag = COUNTRY_FLAGS.get(country.lower(), "🌍")
-        service_name = SERVICES.get(service, service).split()[-1]
-        
-        text = (
-            f"⏳ *Waiting for OTP...*\n\n"
-            f"📱 *{service_name} ({country.capitalize()})*"
-        )
-
-        buttons = []
-        for _, number in rows:
-            # রেফারেন্স ছবির মতো চেক বক্স বা ক্লিপবোর্ড স্টাইল যাতে নিখুঁত নাম্বার কপি করা যায়
-            buttons.append([InlineKeyboardButton(f"☑️ 📋 {number}", callback_data="noop")])
-
-        buttons.append([
-            InlineKeyboardButton("🔄 Change Number", callback_data=f"user_country:{service}:{country}"),
-            InlineKeyboardButton("🌐 OTP Group", url=OTP_GROUP_LINK)
-        ])
-        buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"user_serv:{service}")])
-
-        await query.edit_message_text(
-            text,
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-        return
-
-    if data == "profile":
-        user_id = query.from_user.id
-        claimed_row = db.execute("SELECT claimed FROM users WHERE user_id = ?", (user_id,)).fetchone()
-        claimed = claimed_row[0] if claimed_row else 0
-        total = db.execute("SELECT COUNT(*) FROM numbers WHERE used = 0").fetchone()[0]
-
-        await query.edit_message_text(
-            "👤 *MY PROFILE*\n\n"
-            f"🆔 User ID: `{user_id}`\n"
-            f"📦 Numbers claimed: *{claimed}*\n"
-            f"📊 Current stock: *{total}*",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="main")]])
-        )
-        return
-
-    if data == "traffic":
-        rows = db.execute("SELECT service, COUNT(*), SUM(CASE WHEN used=1 THEN 1 ELSE 0 END) FROM numbers GROUP BY service").fetchall()
-        text = "📊 *LIVE TRAFFIC / STOCK*\n\n"
-        for service, total, used in rows:
-            available = total - (used or 0)
-            text += f"{SERVICES.get(service, service)}\n• Total: {total}\n• Available: {available}\n\n"
-        if not rows:
-            text += "No stock available yet."
-        
-        await query.edit_message_text(
-            text, 
-            parse_mode="Markdown", 
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="main")]])
-        )
-        return
-
-    if data == "search":
-        await query.edit_message_text(
-            "🌐 *Available Countries*\n\nCheck live stock via Live Traffic.",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="main")]])
-        )
-        return
-
-# =========================================================
-# MAIN APP RUNNER
-# =========================================================
-
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = await update.message.document.get_file()
+    await file.download_to_drive("temp.txt")
     
-    upload_conv = ConversationHandler(
-        entry_points=[CommandHandler("upload", start_upload)],
-        states={
-            SERVICE: [CallbackQueryHandler(admin_select_service, pattern="^up_serv:")],
-            COUNTRY: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_select_country)],
-            UPLOAD: [MessageHandler(filters.Document.ALL, admin_handle_file)]
-        },
-        fallbacks=[CommandHandler("cancel", cancel_upload)]
-    )
+    service, country = context.user_data['s'], context.user_data['c']
+    count = 0
+    with open("temp.txt", "r", encoding="latin-1") as f:
+        for line in f:
+            num = "".join(filter(str.isdigit, line))
+            if len(num) > 6:
+                try:
+                    db.execute("INSERT INTO numbers (service, country, number) VALUES (?, ?, ?)", (service, country, num))
+                    count += 1
+                except: continue
+    db.commit()
+    await update.message.reply_text(f"✅ *Added {count} numbers to {service.upper()} ({country.upper()})!*", parse_mode="Markdown")
+    return ConversationHandler.END
 
-    app.add_handler(upload_conv)
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(callbacks))
+# =========================================================
+# USER HANDLERS
+# =========================================================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👑 *NUMBER BOT*\n\n🚀 Welcome to Number & OTP Service\n✅ Choose an option below:", 
+                                    reply_markup=get_main_menu(), parse_mode="Markdown")
 
-    print("Bot is running successfully...")
-    app.run_polling()
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    data = query.data
+    
+    if data == "get_number":
+        buttons = [[InlineKeyboardButton(name, callback_data=f"sel_serv:{key}")] for key, name in SERVICES.items()]
+        buttons.append([InlineKeyboardButton("❌ Close", callback_data="start")])
+        await query.edit_message_text("📍 *Select a service:*", reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+    
+    elif data.startswith("sel_serv:"):
+        serv = data.split(":")[1]
+        countries = db.execute("SELECT DISTINCT country FROM numbers WHERE service=? AND used=0", (serv,)).fetchall()
+        buttons = [[InlineKeyboardButton(c[0].upper(), callback_data=f"sel_ctry:{serv}:{c[0]}")] for c in countries]
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="get_number")])
+        await query.edit_message_text(f"📍 *Select country for {serv.upper()}:*", reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
 
-if __name__ == "__main__":
-    main()
+    elif data.startswith("sel_ctry:"):
+        _, serv, ctry = data.split(":")
+        rows = db.execute("SELECT id, number FROM numbers WHERE service=? AND country=? AND used=0 LIMIT 3", (serv, ctry)).fetchall()
+        
+        text = f"🇷🇪 {serv.upper()} ({ctry.upper()})\n⏳ *Waiting for OTP...*"
+        buttons = [[InlineKeyboardButton(f"📋 {r[1]}", callback_data="noop")] for r in rows]
+        buttons.extend([
+            [InlineKeyboardButton("🔄 Change Number", callback_data=f"sel_ctry:{serv}:{ctry}"), InlineKeyboardButton("🛡️ OTP Group", url=OTP_GROUP_LINK)],
+            [InlineKeyboardButton("🔙 Back", callback_data="get_number")]
+        ])
+        
+        # নাম্বারগুলো মার্ক করা
+        if rows:
+            db.execute(f"UPDATE numbers SET used=1 WHERE id IN ({','.join([str(r[0]) for r in rows])})")
+            db.commit()
+            
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="Markdown")
+
+    elif data == "start":
+        await query.edit_message_text("👑 *NUMBER BOT*\n\n🚀 Welcome to Number & OTP Service\n✅ Choose an option below:", 
+                                    reply_markup=get_main_menu(), parse_mode="Markdown")
+
+# =========================================================
+# RUNNER
+# =========================================================
+app = Application.builder().token(BOT_TOKEN).build()
+conv = ConversationHandler(entry_points=[CommandHandler("upload", start_upload)], 
+                           states={SERVICE: [CallbackQueryHandler(admin_service)], COUNTRY: [MessageHandler(filters.TEXT, admin_country)], UPLOAD: [MessageHandler(filters.Document.ALL, handle_file)]},
+                           fallbacks=[])
+app.add_handler(conv)
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CallbackQueryHandler(button_handler))
+print("Bot started...")
+app.run_polling()

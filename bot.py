@@ -140,7 +140,6 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for cell in row:
                     if cell is not None:
                         val = str(cell).strip()
-                        # শুধুমাত্র নাম্বার বা প্লাস সাইনযুক্ত ভ্যালু ফিল্টার করা যাতে গার্বেজ না আসে
                         if val and not val.lower().startswith("nan"):
                             numbers.append(val)
                             break
@@ -151,8 +150,13 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for number in numbers:
             if not number or number.startswith("#"):
                 continue
+            # নাম্বার ক্লিন করা যেন গার্বেজ বা এক্সট্রা ক্যারেক্টার না থাকে
+            clean_num = "".join([c for c in number if c.isdigit() or c == '+'])
+            if len(clean_num) < 5:
+                invalid += 1
+                continue
             try:
-                db.execute("INSERT INTO numbers (service, country, number, used) VALUES (?, ?, ?, 0)", (service, country, number))
+                db.execute("INSERT INTO numbers (service, country, number, used) VALUES (?, ?, ?, 0)", (service, country, clean_num))
                 added += 1
             except sqlite3.IntegrityError:
                 duplicate += 1
@@ -180,7 +184,7 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # =========================================================
-# USER / GENERAL HANDLERS (EXACT DESIRED LAYOUT)
+# USER / GENERAL HANDLERS
 # =========================================================
 
 def main_menu():
@@ -301,8 +305,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         buttons = []
         for _, number in rows:
-            # সঠিক ফরম্যাটে নাম্বার বাটন যাতে গার্বেজ বা এরর না আসে
-            buttons.append([InlineKeyboardButton(f"{flag} {number}", callback_data="noop")])
+            buttons.append([InlineKeyboardButton(f"{flag} 📋 {number}", callback_data="noop")])
 
         buttons.append([
             InlineKeyboardButton("🔄 Change Number", callback_data=f"user_country:{service}:{country}"),

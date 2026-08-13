@@ -1,4 +1,5 @@
 import sqlite3
+import pandas as pd
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CopyTextButton
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, 
@@ -29,6 +30,7 @@ COUNTRY_FLAGS = {
     "india": "🇮🇳",
     "france": "🇫🇷",
     "malaysia": "🇲🇾",
+    "kyrgyzstan": "🇰🇬",
     "whatsapp": "🟢",
     "telegram": "✈️"
 }
@@ -104,7 +106,7 @@ async def admin_select_country(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await update.message.reply_text(
         f"✅ Country: *{country_name.upper()}*\n\n"
-        "📤 *Now send/upload your `.txt` file containing the numbers:*", 
+        "📤 *Now send/upload your `.xlsx` or `.txt` file containing the numbers:*", 
         parse_mode="Markdown"
     )
     return UPLOAD
@@ -116,11 +118,11 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     document = update.message.document
     if not document:
-        await update.message.reply_text("❌ Please upload a valid text file!")
+        await update.message.reply_text("❌ Please upload a valid file!")
         return UPLOAD
 
     tg_file = await document.get_file()
-    file_path = "temp_upload_file.txt"
+    file_path = "temp_upload_file"
     await tg_file.download_to_drive(file_path)
 
     service = context.user_data.get('upload_service')
@@ -131,11 +133,17 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     invalid = 0
 
     try:
-        with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
-            numbers = [line.strip() for line in f if line.strip()]
+        # এক্সেল ফাইল বা টেক্সট ফাইল রিড করার সিস্টেম
+        if document.file_name.endswith('.xlsx'):
+            df = pd.read_excel(file_path)
+            numbers = df.iloc[:, 0].astype(str).tolist()
+        else:
+            with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
+                numbers = [line.strip() for line in f if line.strip()]
 
         for number in numbers:
-            if not number or number.startswith("#"):
+            number = number.strip()
+            if not number or number.lower() == "nan" or number.startswith("#"):
                 continue
             try:
                 db.execute("INSERT INTO numbers (service, country, number, used) VALUES (?, ?, ?, 0)", (service, country, number))
@@ -166,7 +174,7 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # =========================================================
-# USER / GENERAL HANDLERS
+# USER / GENERAL HANDLERS (EXACT STYLE YOU WANTED)
 # =========================================================
 
 def main_menu():
@@ -289,7 +297,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for _, number in rows:
             buttons.append([InlineKeyboardButton(f"{flag} {number}", copy_text=CopyTextButton(text=number))])
 
-        # বাটনগুলো ঠিক স্ক্রিনশটের স্টাইলে নিচে সেট করা হলো
+        # স্ক্রিনশটের মতো নিচে বাটনগুলো সাজানো
         buttons.append([
             InlineKeyboardButton("🔄 Change Number", callback_data=f"user_country:{service}:{country}"),
             InlineKeyboardButton("🌐 OTP Group", url=OTP_GROUP_LINK)

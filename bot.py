@@ -5,8 +5,8 @@ import json
 import time
 
 api_key = 'sk_live_1x7jN6OUqTIzUNEv7MIM9Er2h5GphCXer9ef4BUx'
-BOT_TOKEN = "8564093311:AAE1wtnRDybV4oOH3HgmJbHplsBovYVtZm8"
-CHAT_ID = "-1003178872820"
+BOT_TOKEN = "8880691679:AAH3V0Hb_Fmx0KPCSxrNDUJJ7PwkA9tvGp4"
+CHAT_ID = "-1004469160922"
 
 url = 'https://redxsms.com/api/v1/iprn/messages'
 

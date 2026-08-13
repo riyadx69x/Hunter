@@ -1,5 +1,4 @@
 import sqlite3
-import pandas as pd
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CopyTextButton
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, 
@@ -105,7 +104,7 @@ async def admin_select_country(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await update.message.reply_text(
         f"✅ Country: *{country_name.upper()}*\n\n"
-        "📤 *Now send/upload your `.txt` or `.xlsx` file containing the numbers:*", 
+        "📤 *Now send/upload your `.txt` file containing the numbers:*", 
         parse_mode="Markdown"
     )
     return UPLOAD
@@ -117,11 +116,11 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     document = update.message.document
     if not document:
-        await update.message.reply_text("❌ Please upload a valid file!")
+        await update.message.reply_text("❌ Please upload a valid text file!")
         return UPLOAD
 
     tg_file = await document.get_file()
-    file_path = "temp_upload_file"
+    file_path = "temp_upload_file.txt"
     await tg_file.download_to_drive(file_path)
 
     service = context.user_data.get('upload_service')
@@ -132,16 +131,10 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     invalid = 0
 
     try:
-        # ফাইলটি .xlsx হলে Pandas দিয়ে পড়বো, অন্যথায় টেক্সট ফাইল হিসেবে পড়বো
-        if document.file_name.endswith('.xlsx'):
-            df = pd.read_excel(file_path)
-            numbers = df.iloc[:, 0].astype(str).tolist()
-        else:
-            with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
-                numbers = [line.strip() for line in f if line.strip()]
+        with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
+            numbers = [line.strip() for line in f if line.strip()]
 
         for number in numbers:
-            number = number.strip()
             if not number or number.startswith("#"):
                 continue
             try:

@@ -121,7 +121,7 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return UPLOAD
 
     tg_file = await document.get_file()
-    file_path = "temp_upload_file.xlsx"
+    file_path = "temp_upload_file.file"
     await tg_file.download_to_drive(file_path)
 
     service = context.user_data.get('upload_service')
@@ -144,15 +144,17 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             numbers.append(val)
                             break
         else:
+            # একদম নিখুঁতভাবে টেক্সট ফাইল রিড করার জন্য এনকোডিং ফিক্সড
             with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
-                numbers = [line.strip() for line in f if line.strip()]
+                for line in f:
+                    cleaned_line = line.strip()
+                    if cleaned_line:
+                        numbers.append(cleaned_line)
 
         for number in numbers:
-            if not number or number.startswith("#"):
-                continue
-            # নাম্বার ক্লিন করা যেন গার্বেজ বা এক্সট্রা ক্যারেক্টার না থাকে
+            # নাম্বার ক্লিন করা যেন কোনো গার্বেজ বা ক্রিপ্টিক কোড না ঢোকে
             clean_num = "".join([c for c in number if c.isdigit() or c == '+'])
-            if len(clean_num) < 5:
+            if len(clean_num) < 5 or not any(c.isdigit() for c in clean_num):
                 invalid += 1
                 continue
             try:
@@ -184,21 +186,21 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # =========================================================
-# USER / GENERAL HANDLERS
+# USER / GENERAL HANDLERS (EXACT REFERENCE LAYOUT)
 # =========================================================
 
 def main_menu():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📞 GET NUMBER", callback_data="get_number"),
-            InlineKeyboardButton("🔎 Search Number", callback_data="search")
+            InlineKeyboardButton("📞 Get Number", callback_data="get_number"),
+            InlineKeyboardButton("🌐 Available Countries", callback_data="search")
         ],
         [
-            InlineKeyboardButton("📊 TRAFFIC", callback_data="traffic"),
-            InlineKeyboardButton("🟢 My Profile", callback_data="profile")
+            InlineKeyboardButton("📊 Live Traffic", callback_data="traffic"),
+            InlineKeyboardButton("👤 My Profile", callback_data="profile")
         ],
         [
-            InlineKeyboardButton("🆘 SUPPORT", url=SUPPORT_LINK)
+            InlineKeyboardButton("🟢 Whatsapp checker", url=SUPPORT_LINK)
         ]
     ])
 
@@ -208,10 +210,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.commit()
     
     text = (
-        "👑 *NUMBER BOT*\n\n"
-        "🌐 *Welcome to Number & OTP Service*\n\n"
-        "✅ *Choose an option below to continue using the bot.*\n\n"
-        "💎 *Premium OTP Service*"
+        f"👋 *Welcome, {user.first_name}!* 🤝\n\n"
+        "✨ *Choose an option from the menu below.*"
     )
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=main_menu())
 
@@ -221,11 +221,10 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
 
     if data == "main":
+        user = query.from_user
         await query.edit_message_text(
-            "👑 *NUMBER BOT*\n\n"
-            "🌐 *Welcome to Number & OTP Service*\n\n"
-            "✅ *Choose an option below to continue using the bot.*\n\n"
-            "💎 *Premium OTP Service*",
+            f"👋 *Welcome, {user.first_name}!* 🤝\n\n"
+            "✨ *Choose an option from the menu below.*",
             parse_mode="Markdown",
             reply_markup=main_menu()
         )
@@ -338,7 +337,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "traffic":
         rows = db.execute("SELECT service, COUNT(*), SUM(CASE WHEN used=1 THEN 1 ELSE 0 END) FROM numbers GROUP BY service").fetchall()
-        text = "📊 *TRAFFIC / STOCK*\n\n"
+        text = "📊 *LIVE TRAFFIC / STOCK*\n\n"
         for service, total, used in rows:
             available = total - (used or 0)
             text += f"{SERVICES.get(service, service)}\n• Total: {total}\n• Available: {available}\n\n"
@@ -354,7 +353,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "search":
         await query.edit_message_text(
-            "🔎 *Search Number*\n\nFeature coming soon or use GET NUMBER.",
+            "🌐 *Available Countries*\n\nCheck live stock via Live Traffic.",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="main")]])
         )

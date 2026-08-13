@@ -26,6 +26,7 @@ from telegram.ext import (
 BOT_TOKEN = "8564093311:AAH55oqI6UmMfXycsEtxtIMjOHNN6atuVoo"
 ADMIN_ID = 7813513663
 OTP_GROUP_LINK = "https://t.me/X_OTP_service"
+SUPPORT_LINK = "https://t.me/Kirito_X69"
 
 DB_FILE = "numbers.db"
 
@@ -103,7 +104,7 @@ def main_menu():
         [
             InlineKeyboardButton(
                 "🆘 SUPPORT",
-                callback_data="support"
+                url=SUPPORT_LINK
             )
         ]
     ])
@@ -397,16 +398,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text(
             text,
-            parse_mode="Markdown",
-            reply_markup=back_button()
-        )
-        return
-
-    # SUPPORT
-    if data == "support":
-        await query.edit_message_text(
-            "🆘 *SUPPORT*\n\n"
-            "For support, contact the administrator.",
             parse_mode="Markdown",
             reply_markup=back_button()
         )

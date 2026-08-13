@@ -1,5 +1,5 @@
 import sqlite3
-import pandas as pd
+import openpyxl
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CopyTextButton
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, 
@@ -16,10 +16,9 @@ OTP_GROUP_LINK = "https://t.me/X_OTP_service"
 SUPPORT_LINK = "https://t.me/Kirito_X69"
 DB_FILE = "numbers.db"
 
-# কনভার্সেশন স্টেট (অ্যাডমিন আপলোডের জন্য)
+# কনভার্সেশন স্টেট
 SERVICE, COUNTRY, UPLOAD = range(3)
 
-# কান্ট্রি ফ্ল্যাগ ডিকশনারি
 COUNTRY_FLAGS = {
     "morocco": "🇲🇦",
     "ukraine": "🇺🇦",
@@ -122,7 +121,7 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return UPLOAD
 
     tg_file = await document.get_file()
-    file_path = "temp_upload_file"
+    file_path = "temp_upload_file.xlsx"
     await tg_file.download_to_drive(file_path)
 
     service = context.user_data.get('upload_service')
@@ -133,17 +132,19 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     invalid = 0
 
     try:
-        # এক্সেল ফাইল বা টেক্সট ফাইল রিড করার সিস্টেম
+        numbers = []
         if document.file_name.endswith('.xlsx'):
-            df = pd.read_excel(file_path)
-            numbers = df.iloc[:, 0].astype(str).tolist()
+            wb = openpyxl.load_workbook(file_path, data_only=True)
+            sheet = wb.active
+            for row in sheet.iter_rows(values_only=True):
+                if row and row[0] is not None:
+                    numbers.append(str(row[0]).strip())
         else:
             with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
                 numbers = [line.strip() for line in f if line.strip()]
 
         for number in numbers:
-            number = number.strip()
-            if not number or number.lower() == "nan" or number.startswith("#"):
+            if not number or number.lower() == "none" or number.startswith("#"):
                 continue
             try:
                 db.execute("INSERT INTO numbers (service, country, number, used) VALUES (?, ?, ?, 0)", (service, country, number))
@@ -174,7 +175,7 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # =========================================================
-# USER / GENERAL HANDLERS (EXACT STYLE YOU WANTED)
+# USER / GENERAL HANDLERS
 # =========================================================
 
 def main_menu():
@@ -297,7 +298,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for _, number in rows:
             buttons.append([InlineKeyboardButton(f"{flag} {number}", copy_text=CopyTextButton(text=number))])
 
-        # স্ক্রিনশটের মতো নিচে বাটনগুলো সাজানো
         buttons.append([
             InlineKeyboardButton("🔄 Change Number", callback_data=f"user_country:{service}:{country}"),
             InlineKeyboardButton("🌐 OTP Group", url=OTP_GROUP_LINK)

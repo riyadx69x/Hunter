@@ -1,6 +1,6 @@
 import sqlite3
 import openpyxl
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CopyTextButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, 
     MessageHandler, ContextTypes, filters, ConversationHandler
@@ -137,14 +137,19 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             wb = openpyxl.load_workbook(file_path, data_only=True)
             sheet = wb.active
             for row in sheet.iter_rows(values_only=True):
-                if row and row[0] is not None:
-                    numbers.append(str(row[0]).strip())
+                for cell in row:
+                    if cell is not None:
+                        val = str(cell).strip()
+                        # শুধুমাত্র নাম্বার বা প্লাস সাইনযুক্ত ভ্যালু ফিল্টার করা যাতে গার্বেজ না আসে
+                        if val and not val.lower().startswith("nan"):
+                            numbers.append(val)
+                            break
         else:
             with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
                 numbers = [line.strip() for line in f if line.strip()]
 
         for number in numbers:
-            if not number or number.lower() == "none" or number.startswith("#"):
+            if not number or number.startswith("#"):
                 continue
             try:
                 db.execute("INSERT INTO numbers (service, country, number, used) VALUES (?, ?, ?, 0)", (service, country, number))
@@ -175,7 +180,7 @@ async def cancel_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # =========================================================
-# USER / GENERAL HANDLERS
+# USER / GENERAL HANDLERS (EXACT DESIRED LAYOUT)
 # =========================================================
 
 def main_menu():
@@ -296,7 +301,8 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         buttons = []
         for _, number in rows:
-            buttons.append([InlineKeyboardButton(f"{flag} {number}", copy_text=CopyTextButton(text=number))])
+            # সঠিক ফরম্যাটে নাম্বার বাটন যাতে গার্বেজ বা এরর না আসে
+            buttons.append([InlineKeyboardButton(f"{flag} {number}", callback_data="noop")])
 
         buttons.append([
             InlineKeyboardButton("🔄 Change Number", callback_data=f"user_country:{service}:{country}"),

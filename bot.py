@@ -1,4 +1,5 @@
 import sqlite3
+import pandas as pd
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CopyTextButton
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, 
@@ -93,7 +94,7 @@ async def admin_select_service(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await query.edit_message_text(
         f"✅ Selected Service: *{SERVICES.get(service_key, service_key)}*\n\n"
-        "✍️ *Now send the Country Name (e.g., morocco):*", 
+        "✍️ *Now send the Country Name (e.g., Morocco):*", 
         parse_mode="Markdown"
     )
     return COUNTRY
@@ -104,7 +105,7 @@ async def admin_select_country(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await update.message.reply_text(
         f"✅ Country: *{country_name.upper()}*\n\n"
-        "📤 *Now send/upload your `.txt` file containing the numbers (one number per line):*", 
+        "📤 *Now send/upload your `.txt` or `.xlsx` file containing the numbers:*", 
         parse_mode="Markdown"
     )
     return UPLOAD
@@ -116,16 +117,12 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     document = update.message.document
     if not document:
-        await update.message.reply_text("❌ Please upload a valid text file!")
+        await update.message.reply_text("❌ Please upload a valid file!")
         return UPLOAD
 
     tg_file = await document.get_file()
-    data = await tg_file.download_as_bytearray()
-    
-    try:
-        content = data.decode("utf-8-sig")
-    except:
-        content = data.decode("latin-1")
+    file_path = "temp_upload_file"
+    await tg_file.download_to_drive(file_path)
 
     service = context.user_data.get('upload_service')
     country = context.user_data.get('upload_country')
@@ -134,20 +131,32 @@ async def admin_handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     duplicate = 0
     invalid = 0
 
-    for line in content.splitlines():
-        number = line.strip()
-        if not number or number.startswith("#"):
-            continue
-        
-        try:
-            db.execute("INSERT INTO numbers (service, country, number, used) VALUES (?, ?, ?, 0)", (service, country, number))
-            added += 1
-        except sqlite3.IntegrityError:
-            duplicate += 1
-        except Exception:
-            invalid += 1
+    try:
+        # ফাইলটি .xlsx হলে Pandas দিয়ে পড়বো, অন্যথায় টেক্সট ফাইল হিসেবে পড়বো
+        if document.file_name.endswith('.xlsx'):
+            df = pd.read_excel(file_path)
+            numbers = df.iloc[:, 0].astype(str).tolist()
+        else:
+            with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
+                numbers = [line.strip() for line in f if line.strip()]
 
-    db.commit()
+        for number in numbers:
+            number = number.strip()
+            if not number or number.startswith("#"):
+                continue
+            try:
+                db.execute("INSERT INTO numbers (service, country, number, used) VALUES (?, ?, ?, 0)", (service, country, number))
+                added += 1
+            except sqlite3.IntegrityError:
+                duplicate += 1
+            except Exception:
+                invalid += 1
+
+        db.commit()
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error reading file: {e}")
+        return ConversationHandler.END
+
     await update.message.reply_text(
         "✅ *STOCK UPDATE COMPLETE*\n\n"
         f"📌 Service: *{SERVICES.get(service, service)}*\n"
@@ -287,6 +296,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for _, number in rows:
             buttons.append([InlineKeyboardButton(f"{flag} {number}", copy_text=CopyTextButton(text=number))])
 
+        # বাটনগুলো ঠিক স্ক্রিনশটের স্টাইলে নিচে সেট করা হলো
         buttons.append([
             InlineKeyboardButton("🔄 Change Number", callback_data=f"user_country:{service}:{country}"),
             InlineKeyboardButton("🌐 OTP Group", url=OTP_GROUP_LINK)
@@ -347,7 +357,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
-    # অ্যাডমিন আপলোড কনভার্সেশন হ্যান্ডলার
     upload_conv = ConversationHandler(
         entry_points=[CommandHandler("upload", start_upload)],
         states={
